@@ -4,10 +4,14 @@ import yt_dlp
 import asyncio
 import os
 from dotenv import load_dotenv
+import wavelink
 
 # Carregar variáveis do .env
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
+LAVALINK_HOST = os.getenv("LAVALINK_HOST", "localhost")
+LAVALINK_PORT = os.getenv("LAVALINK_PORT", 2333)
+LAVALINK_PASSWORD = os.getenv("LAVALINK_PASSWORD", "youshallnotpass")
 
 if not TOKEN:
     raise ValueError("Token do Discord não encontrado! Verifique seu arquivo .env.")
@@ -21,6 +25,18 @@ bot = commands.Bot(command_prefix="!", intents=intents, reconnect=True)
 # Variáveis globais
 music_queue = []
 is_playing = False
+
+# Função para conectar ao Lavalink
+async def connect_to_lavalink(ctx):
+    node = await wavelink.NodePool.create_node(
+        bot=bot,
+        host=LAVALINK_HOST,
+        port=LAVALINK_PORT,
+        password=LAVALINK_PASSWORD,
+        identifier="default",
+        region="us_central"
+    )
+    await node.connect(ctx.guild.id)
 
 # Função para obter URL do áudio sem download
 def get_audio_stream(query):
@@ -46,9 +62,9 @@ async def ensure_voice(ctx):
     if not ctx.author.voice:
         await ctx.send("❌ Você precisa estar em um canal de voz para tocar músicas!")
         return
-    
+
     voice_channel = ctx.author.voice.channel
-    
+
     if ctx.voice_client:  # Se o bot já está conectado a um canal
         if ctx.voice_client.channel != voice_channel:
             await ctx.voice_client.move_to(voice_channel)
@@ -58,7 +74,7 @@ async def ensure_voice(ctx):
         except discord.errors.ClientException as e:
             await ctx.send(f"❌ Erro ao conectar no canal: {e}")
 
-# Função para tocar música
+# Função para tocar música com Lavalink
 async def play_music(ctx):
     global is_playing
 
@@ -74,8 +90,11 @@ async def play_music(ctx):
     url, title = music_queue.pop(0)
 
     try:
-        source = discord.FFmpegPCMAudio(url)
-        ctx.voice_client.play(source, after=lambda e: asyncio.run_coroutine_threadsafe(check_queue(ctx), bot.loop).result())
+        # Usando o Lavalink para tocar a música
+        player = ctx.voice_client
+        track = await wavelink.YouTubeTrack.search(query=url)
+        await player.play(track[0])
+
         is_playing = True
         await ctx.send(f"🎶 Tocando agora: **{title}**")
     except Exception as e:
