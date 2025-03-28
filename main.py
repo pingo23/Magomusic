@@ -43,11 +43,20 @@ def get_audio_stream(query):
 
 # Garante que o bot esteja no canal correto
 async def ensure_voice(ctx):
-    if not ctx.voice_client:
-        await ctx.author.voice.channel.connect()
-    elif ctx.voice_client.is_connected() is False:
-        await ctx.voice_client.disconnect()
-        await ctx.author.voice.channel.connect()
+    if not ctx.author.voice:
+        await ctx.send("❌ Você precisa estar em um canal de voz para tocar músicas!")
+        return
+    
+    voice_channel = ctx.author.voice.channel
+    
+    if ctx.voice_client:  # Se o bot já está conectado a um canal
+        if ctx.voice_client.channel != voice_channel:
+            await ctx.voice_client.move_to(voice_channel)
+    else:
+        try:
+            await voice_channel.connect()
+        except discord.errors.ClientException as e:
+            await ctx.send(f"❌ Erro ao conectar no canal: {e}")
 
 # Função para tocar música
 async def play_music(ctx):
@@ -161,14 +170,6 @@ async def leave(ctx):
         await ctx.send("👋 Desconectado do canal de voz.")
     else:
         await ctx.send("❌ Não estou em um canal de voz!")
-
-# Reconexão automática se o bot for desconectado do canal de voz
-@bot.event
-async def on_voice_state_update(member, before, after):
-    if member == bot.user and before.channel and not after.channel:
-        print("⚠️ Bot foi desconectado! Tentando reconectar...")
-        await asyncio.sleep(2)
-        await before.channel.connect()
 
 @bot.event
 async def on_ready():
